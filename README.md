@@ -7,7 +7,7 @@ DockSheriff performs 15 read-only checks against container configuration and exp
 > DockSheriff complements image and host scanners such as Trivy, Dockle, and Docker Bench. It focuses narrowly on the effective configuration of containers that already exist.
 
 ```sh
-go install github.com/docksheriff/docksheriff/cmd/docksheriff@latest
+go install github.com/1184468969/docksheriff/cmd/docksheriff@latest
 docksheriff --fail-on high
 docksheriff inspect portainer
 docksheriff explain DS002

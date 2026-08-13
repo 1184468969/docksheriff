@@ -2,7 +2,7 @@ package audit
 
 import (
 	"fmt"
-	"github.com/docksheriff/docksheriff/internal/dockerapi"
+	"github.com/1184468969/docksheriff/internal/dockerapi"
 	"testing"
 )
 

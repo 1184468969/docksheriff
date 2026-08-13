@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/docksheriff/docksheriff/internal/audit"
-	"github.com/docksheriff/docksheriff/internal/dockerapi"
-	"github.com/docksheriff/docksheriff/internal/engine"
+	"github.com/1184468969/docksheriff/internal/audit"
+	"github.com/1184468969/docksheriff/internal/dockerapi"
+	"github.com/1184468969/docksheriff/internal/engine"
 )
 
 type stringsFlag []string
