@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/1184468969/docksheriff/security/advisories/new
+    about: Do not disclose vulnerabilities, credentials, or sensitive Docker data in a public issue.
+  - name: Read the security policy
+    url: https://github.com/1184468969/docksheriff/blob/main/SECURITY.md
+    about: Review supported versions, scope, and safe reporting guidance.

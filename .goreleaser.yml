@@ -1,21 +1,75 @@
 version: 2
+
 project_name: docksheriff
-before:
-  hooks:
-    - go mod tidy
+
 builds:
-  - main: ./cmd/docksheriff
+  - id: docksheriff
+    main: ./cmd/docksheriff
     binary: docksheriff
-    env: [CGO_ENABLED=0]
-    goos: [linux, darwin, windows]
-    goarch: [amd64, arm64]
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - >-
+        -s -w
+        -X main.version={{ .Version }}
+        -X main.commit={{ .Commit }}
+        -X main.date={{ .Date }}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
 archives:
-  - formats: [tar.gz]
+  - id: default
+    ids:
+      - docksheriff
+    formats:
+      - tar.gz
     format_overrides:
       - goos: windows
-        formats: [zip]
+        formats:
+          - zip
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
+      - CHANGELOG.md
+      - CONTRIBUTING.md
+      - SECURITY.md
+      - CODE_OF_CONDUCT.md
+      - docs/RULES.md
+      - docs/JSON_SCHEMA.md
+      - docs/THREAT_MODEL.md
+      - docs/RELEASE_NOTES_v0.1.0-rc.1.md
+
 checksum:
   name_template: checksums.txt
+  algorithm: sha256
+
+sboms:
+  - id: archives
+    artifacts: archive
+
 changelog:
   sort: asc
+  filters:
+    exclude:
+      - "^chore:"
+      - "^ci:"
+      - "^docs:"
+      - "^test:"
+      - "^Merge branch"
+      - "^Merge pull request"
 
+release:
+  draft: true
+  prerelease: auto
+  name_template: "DockSheriff {{ .Tag }}"

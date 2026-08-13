@@ -1,0 +1,4 @@
+/docksheriff
+/dist/
+*.test
+*.out

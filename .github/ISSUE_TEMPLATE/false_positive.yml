@@ -1,0 +1,69 @@
+name: False positive
+description: Report a rule that fires outside its documented scope.
+title: "[False positive]: "
+labels:
+  - false-positive
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share only the fields needed to evaluate the rule. Remove passwords, tokens, endpoint credentials, environment variables, arbitrary labels, private registry/image names, internal hostnames, and sensitive paths. Never paste complete `docker inspect` JSON.
+  - type: dropdown
+    id: rule
+    attributes:
+      label: Rule
+      options:
+        - DS001
+        - DS002
+        - DS003
+        - DS004
+        - DS005
+        - DS006
+        - DS007
+        - DS008
+        - DS009
+        - DS010
+        - DS011
+        - DS012
+        - DS013
+        - DS014
+        - DS015
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: DockSheriff version
+      placeholder: v0.1.0-rc.1 or commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: sanitized_finding
+    attributes:
+      label: Sanitized finding
+      description: Paste the single finding after replacing operational identifiers with placeholders.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: minimal_fields
+    attributes:
+      label: Minimal relevant configuration
+      description: Include only the relevant structured fields, not a full Inspect response. Prefer synthetic values.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: reasoning
+    attributes:
+      label: Why is this outside the documented rule semantics?
+      description: Explain the boundary condition and whether changing the rule could create false negatives.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Redaction confirmation
+      options:
+        - label: I removed credentials, environment variables, arbitrary labels, complete Inspect output, and sensitive operational identifiers.
+          required: true

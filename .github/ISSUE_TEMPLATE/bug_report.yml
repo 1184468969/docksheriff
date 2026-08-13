@@ -1,0 +1,78 @@
+name: Bug report
+description: Report incorrect CLI, Engine, or output behavior using redacted data.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Remove passwords, tokens, private keys, endpoint credentials, environment variables, arbitrary labels, private image names, and internal hostnames. Do not paste full `docker inspect` JSON. Provide only a minimal, synthetic or redacted configuration fragment.
+
+        If this could be a vulnerability or you cannot safely redact it, stop and use the private process in `SECURITY.md`.
+  - type: input
+    id: version
+    attributes:
+      label: DockSheriff version
+      description: Use `docksheriff --version` or provide the commit SHA. Do not include a private repository URL.
+      placeholder: v0.1.0-rc.1 or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: cli_platform
+    attributes:
+      label: DockSheriff CLI platform
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other or unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: container_platform
+    attributes:
+      label: Container platform
+      description: v0.1 audits Linux container configuration only; non-Linux or missing-platform Inspect data is rejected.
+      options:
+        - Linux
+        - Windows
+        - Other or unknown
+    validations:
+      required: true
+  - type: input
+    id: go_docker
+    attributes:
+      label: Docker Engine and Go versions
+      description: Provide only non-sensitive version numbers that are relevant.
+      placeholder: Docker Engine 27.x; Go 1.24.x
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and sanitized output. Do not include raw low-level errors if they contain endpoint or filesystem details.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Use a daemon-free test or a minimal redacted configuration fragment where possible. Never attach complete Inspect output.
+      render: text
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Redaction confirmation
+      options:
+        - label: I removed credentials, tokens, private keys, environment variables, arbitrary labels, complete Inspect output, and sensitive internal identifiers.
+          required: true
+        - label: I checked that this report does not describe a security vulnerability requiring private disclosure.
+          required: true
