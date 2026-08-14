@@ -104,13 +104,14 @@ candidate and must not be inferred from checksums or SBOMs.
 
 ## Verification gate before publishing
 
-Local source validation on 2026-08-13 passed with Go 1.24.0 and Go 1.25.12.
-`govulncheck v1.6.0` reports `No vulnerabilities found` with Go 1.25.12 after
+Final local source validation on 2026-08-14 passed with Go 1.24.0 compatibility
+and Go 1.25.13. `govulncheck v1.6.0` reports `No vulnerabilities found` with Go
+1.25.13 after
 replacing the broad legacy Docker module with the official split Moby API/client
-modules. A clean GoReleaser snapshot from the exact committed candidate tree
-also passed. The repository remains unpublished: the candidate still needs
-hosted CI/CodeQL evidence and the representative read-only Docker smoke-test
-matrix below.
+modules. A clean GoReleaser snapshot from the exact committed candidate tree and
+a read-only rootful Docker 25.0.5 Unix-socket smoke test also passed. The
+repository remains unpublished: the candidate still needs hosted CI/CodeQL
+evidence and the remaining read-only Docker smoke-test matrix below.
 
 These notes must not be used to publish the candidate until the exact release
 commit passes:
@@ -129,25 +130,31 @@ goreleaser release --snapshot --clean
 git diff --check
 ```
 
-The exact-commit snapshot used GoReleaser v2.12.0, Syft v1.33.0, and Go 1.25.12.
+The exact-commit snapshot used GoReleaser v2.12.0, Syft v1.33.0, and Go 1.25.13.
 It produced all six planned OS/architecture archives, 12 verified SHA-256
 entries covering archives and SBOMs, and six SPDX 2.3 archive SBOMs. Every
 archive contains the expected binary plus 11 license, policy, and project
 documents. The Linux amd64 binary's `--version` output contains the snapshot
 version, full source commit, and build date injected by ldflags.
 
-Read-only smoke testing is also required on representative rootful and rootless
-Docker, Docker Desktop in Linux-container mode, Unix-socket and verified-TLS
-TCP connections, an empty Engine, single/multiple containers, and `--all` with a
-stopped container. Docker Engine 25.x, 26.x, 27.x, and a current supported
-version are intended targets when test environments are available. Automated
-tests remain daemon-free and never require privileged containers.
+A 2026-08-14 vulnerability-database refresh found four reachable standard
+library advisories in the earlier Go 1.25.12 build. All four are fixed in Go
+1.25.13, so the older snapshot was discarded and is not a release candidate.
 
-No live Docker smoke test was performed during this review. Hosted CI/CodeQL
-and the Docker smoke-test matrix have not yet been completed and remain
-publication blockers. At publication time, replace this section with the exact
-commands, versions, platforms, and outcomes. If a tool or environment is
-unavailable, disclose the gap rather than implying it passed.
+On 2026-08-14, the committed Linux amd64 candidate passed a read-only smoke test
+against an existing rootful Docker Engine 25.0.5 (API 1.44) through
+`unix:///var/run/docker.sock`. Default scan covered 11 running containers;
+`--all` covered 19 containers including 8 stopped containers. Single-container
+inspection covered one existing running and one existing stopped container.
+Explicit `--host`, `DOCKER_HOST`, schema-1 JSON, deterministic normalized JSON,
+human Why/Fix output, and `--fail-on critical` status 1 also passed. No container
+was created, started, stopped, modified, or run privileged.
+
+Hosted CI/CodeQL, rootless Docker, Docker Desktop Linux-container mode,
+verified-TLS TCP, empty and single-container Engines, Docker 26.x/27.x/current,
+and macOS/Windows clients remain publication blockers. At publication time,
+record the exact versions, platforms, commands, and outcomes for every completed
+row and disclose any unavailable environment rather than implying it passed.
 
 ## Feedback and reporting
 

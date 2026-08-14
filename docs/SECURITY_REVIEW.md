@@ -1,11 +1,12 @@
 # DockSheriff v0.1.0-rc.1 security review
 
-Review date: 2026-08-13
+Review dates: 2026-08-13 through 2026-08-14
 Reviewed baseline: `d0091f0` (`main`)
 Review scope: source, tests, workflows, release configuration, documentation,
 and dependency design
-Runtime scope: daemon-free automated tests only; no Docker daemon or privileged
-container was used
+Runtime scope: daemon-free automated tests plus a read-only rootful Linux Docker
+25.0.5 Unix-socket smoke test; no container was created, started, stopped,
+modified, or run privileged
 
 ## Executive summary
 
@@ -148,44 +149,76 @@ false positive when a daemon-wide no-new-privileges default applies, and this is
 documented rather than widening the Engine interface to Docker Info.
 
 Source validation passed locally, including Go 1.24.0 compatibility, Go
-1.25.12 tests/vet/build, race tests, golangci-lint v2.12.2, and govulncheck
+1.25.13 tests/vet/build, race tests, golangci-lint v2.12.2, and govulncheck
 v1.6.0 (`No vulnerabilities found`). GoReleaser v2.12.0 and Syft v1.33.0
 validated a clean snapshot from the exact committed candidate tree: six
 archives, 12 verified checksum entries, six SPDX 2.3 SBOMs, 12 entries per
-archive, and version metadata containing the source commit. Hosted CI/CodeQL
-and the remaining rootful/rootless, Docker Desktop
-Linux-container-mode, verified-TLS, empty-Engine, Engine-version, and cross-OS
-client matrix remain publication blockers. No Docker daemon was contacted and
-no privileged container was used during this review.
+archive, and version metadata containing the source commit. A read-only live
+smoke test also passed against rootful Docker Engine 25.0.5 over its Unix socket.
+Hosted CI/CodeQL and the remaining rootless, Docker Desktop
+Linux-container-mode, verified-TLS, empty/single-Engine, later Engine-version,
+and cross-OS client matrix remain publication blockers. No container was
+created, started, stopped, modified, or run privileged during this review.
 
 ## Remediation verification
 
 The release-candidate source and exact committed snapshot passed the following
-local checks on 2026-08-13:
+local checks, with the final toolchain refresh completed on 2026-08-14:
 
 ```text
 GOTOOLCHAIN=go1.24.0 go test ./...
-GOTOOLCHAIN=go1.25.12 go test ./...
-GOTOOLCHAIN=go1.25.12 go test -race ./...
-GOTOOLCHAIN=go1.25.12 go vet ./...
-GOTOOLCHAIN=go1.25.12 go build ./cmd/docksheriff
-GOTOOLCHAIN=go1.25.12 golangci-lint run
-GOTOOLCHAIN=go1.25.12 govulncheck ./...
+GOTOOLCHAIN=go1.25.13 go test ./...
+GOTOOLCHAIN=go1.25.13 go test -race ./...
+GOTOOLCHAIN=go1.25.13 go vet ./...
+GOTOOLCHAIN=go1.25.13 go build ./cmd/docksheriff
+GOTOOLCHAIN=go1.25.13 golangci-lint run
+GOTOOLCHAIN=go1.25.13 govulncheck ./...
 goreleaser check
-GOTOOLCHAIN=go1.25.12 goreleaser release --snapshot --clean
+GOTOOLCHAIN=go1.25.13 goreleaser release --snapshot --clean
 git diff --check
 ```
 
-The vulnerability database returned a transient EOF through the configured
-HTTP proxy. A direct-network retry succeeded and reported
-`No vulnerabilities found`. The successful result, rather than the transport
-failure, is the recorded scan outcome.
+An initial vulnerability-database request returned a transient EOF through the
+configured HTTP proxy. A direct-network retry succeeded. On 2026-08-14, a fresh
+database scan then identified GO-2026-6218, GO-2026-6090, GO-2026-5972, and
+GO-2026-5026 in the Go 1.25.12 standard library, all fixed by Go 1.25.13. The
+1.25.12 artifacts were discarded; the final gate and release snapshot use Go
+1.25.13 and report `No vulnerabilities found`.
 
 The clean snapshot contains Linux, macOS, and Windows archives for amd64 and
 arm64. All 12 checksum entries passed, all six archive SBOMs identify SPDX 2.3,
 and every archive contains the binary plus 11 expected license, policy, and
 project documents. The Linux amd64 binary reports the snapshot version, full
 source commit, and build date injected by ldflags.
+
+## Live read-only smoke verification
+
+On 2026-08-14, the committed Linux amd64 candidate was exercised against an
+existing rootful Docker Engine 25.0.5 (API 1.44) on Linux amd64 through
+`unix:///var/run/docker.sock`. The daemon already contained 11 running and 8
+stopped containers; the test did not change that state.
+
+The following paths passed. The repository record contains only aggregate
+results; it does not include complete reports, Inspect payloads, container IDs,
+environment values, or arbitrary labels:
+
+- default JSON scan of all 11 running containers;
+- `--all` JSON scan of all 19 containers, including the 8 stopped containers;
+- single-container JSON inspection of one existing running container and one
+  existing stopped container;
+- explicit `--host unix:///var/run/docker.sock` and equivalent `DOCKER_HOST`
+  selection;
+- repeated scan comparison after removing only `generated_at`, with identical
+  normalized output;
+- table output containing Why, Fix, and Summary with no ANSI escape byte;
+- `--fail-on critical`, which completed the scan and returned status 1.
+
+Every JSON report used schema version 1 and the documented top-level fields. A
+recursive key check found no Env, Labels, Annotations, command, entrypoint, or
+full-ID field. This closes one rootful/Unix-socket/Docker-25/multiple-and-stopped
+matrix row. Rootless Docker, Docker Desktop Linux-container mode, verified TLS,
+empty and single-container Engines, Docker 26.x/27.x/current, and macOS/Windows
+clients remain unverified publication blockers.
 
 ## Baseline verification
 

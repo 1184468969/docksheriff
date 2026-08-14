@@ -52,6 +52,9 @@ expose an unauthenticated TCP daemon for scanning. See the
 ## Installation
 
 DockSheriff's module currently requires Go 1.24 or newer to build from source.
+Use the latest security patch release for the selected Go series; minimum-version
+compatibility is not a recommendation to ship binaries built with an unpatched
+initial toolchain.
 
 Until a release candidate has been published, install the current source only
 after reviewing the commit you intend to run:
@@ -236,11 +239,11 @@ connect to a remote Linux Engine or Docker Desktop in Linux-container mode;
 Inspect data with a missing or non-Linux platform is rejected with status 2 to
 avoid applying Linux rules to Windows containers. The build matrix verifies
 compilation and fixture behavior, not compatibility with every Docker Engine
-or host configuration. Before `v0.1.0`, maintainers intend to perform read-only
-smoke tests against rootful and rootless Docker, Docker Desktop in
-Linux-container mode, Unix sockets, and verified TLS endpoints. See the
-[release-candidate notes](docs/RELEASE_NOTES_v0.1.0-rc.1.md) for the exact
-verification status.
+or host configuration. A read-only rootful Docker 25.0.5 Unix-socket smoke test
+has passed. Rootless Docker, Docker Desktop in Linux-container mode, verified
+TLS endpoints, later Engine versions, and cross-OS clients remain publication
+gates. See the [release-candidate notes](docs/RELEASE_NOTES_v0.1.0-rc.1.md) for
+the exact verification status.
 
 ## Known limitations
 
