@@ -155,10 +155,12 @@ validated a clean snapshot from the exact committed candidate tree: six
 archives, 12 verified checksum entries, six SPDX 2.3 SBOMs, 12 entries per
 archive, and version metadata containing the source commit. A read-only live
 smoke test also passed against rootful Docker Engine 25.0.5 over its Unix socket.
-Hosted CI/CodeQL and the remaining rootless, Docker Desktop
-Linux-container-mode, verified-TLS, empty/single-Engine, later Engine-version,
-and cross-OS client matrix remain publication blockers. No container was
-created, started, stopped, modified, or run privileged during this review.
+Hosted CI and CodeQL passed on PR #2 at commit `6612f5b` on 2026-08-14,
+including the minimum/stable Go matrix and native Ubuntu, macOS, and Windows
+jobs. The remaining rootless, Docker Desktop Linux-container-mode, verified-TLS,
+empty/single-Engine, later Engine-version, and live cross-OS client matrix remain
+publication blockers. No container was created, started, stopped, modified, or
+run privileged during this review.
 
 ## Remediation verification
 

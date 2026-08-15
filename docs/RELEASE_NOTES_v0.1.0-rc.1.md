@@ -109,9 +109,11 @@ and Go 1.25.13. `govulncheck v1.6.0` reports `No vulnerabilities found` with Go
 1.25.13 after
 replacing the broad legacy Docker module with the official split Moby API/client
 modules. A clean GoReleaser snapshot from the exact committed candidate tree and
-a read-only rootful Docker 25.0.5 Unix-socket smoke test also passed. The
-repository remains unpublished: the candidate still needs hosted CI/CodeQL
-evidence and the remaining read-only Docker smoke-test matrix below.
+a read-only rootful Docker 25.0.5 Unix-socket smoke test also passed. Hosted CI
+and CodeQL passed on PR #2 at commit `6612f5b` on 2026-08-14, including the
+minimum/stable Go matrix and native Ubuntu, macOS, and Windows jobs. The
+repository remains unpublished: the candidate still needs the remaining
+read-only Docker smoke-test matrix below.
 
 These notes must not be used to publish the candidate until the exact release
 commit passes:
@@ -150,11 +152,12 @@ Explicit `--host`, `DOCKER_HOST`, schema-1 JSON, deterministic normalized JSON,
 human Why/Fix output, and `--fail-on critical` status 1 also passed. No container
 was created, started, stopped, modified, or run privileged.
 
-Hosted CI/CodeQL, rootless Docker, Docker Desktop Linux-container mode,
-verified-TLS TCP, empty and single-container Engines, Docker 26.x/27.x/current,
-and macOS/Windows clients remain publication blockers. At publication time,
-record the exact versions, platforms, commands, and outcomes for every completed
-row and disclose any unavailable environment rather than implying it passed.
+The remaining publication blockers are rootless Docker, Docker Desktop
+Linux-container mode, verified-TLS TCP, empty and single-container Engines,
+Docker 26.x/27.x/current, and live macOS/Windows client connections. At
+publication time, record the exact versions, platforms, commands, and outcomes
+for every completed row and disclose any unavailable environment rather than
+implying it passed.
 
 ## Feedback and reporting
 
