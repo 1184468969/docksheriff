@@ -1,19 +1,17 @@
 package audit
 
 import (
-	"fmt"
-	"path/filepath"
+	_ "crypto/sha256"
+	"path"
+	"strconv"
 	"strings"
 
-	"github.com/1184468969/docksheriff/internal/dockerapi"
+	"github.com/1184468969/docksheriff/internal/docker"
+	"github.com/1184468969/docksheriff/internal/safe"
+	"github.com/distribution/reference"
 )
 
-type Rule struct {
-	ID                         string
-	Severity                   Severity
-	Summary, Risk, Remediation string
-}
-
+// Rules is ordered by stable rule ID.
 var Rules = []Rule{
 	{"DS001", Critical, "Privileged container", "Privileged containers can bypass most isolation controls.", "Remove --privileged and grant only required capabilities."},
 	{"DS002", Critical, "Docker socket mounted", "The Docker socket normally grants host-level control.", "Remove the socket mount or use a narrowly scoped proxy."},
@@ -24,135 +22,215 @@ var Rules = []Rule{
 	{"DS007", High, "Host namespace shared", "Sharing host namespaces weakens process and host isolation.", "Use private PID, IPC, UTS, and cgroup namespaces."},
 	{"DS008", High, "Dangerous capability added", "Powerful Linux capabilities can enable container escape or host tampering.", "Drop capabilities and add only the minimum required."},
 	{"DS009", High, "Mandatory security control disabled", "Disabling seccomp, AppArmor, or SELinux removes defense in depth.", "Use the runtime default or a tailored security profile."},
-	{"DS010", High, "Host device mapped", "Direct device access can expose host data or kernel interfaces.", "Remove device mappings or use a safer broker."},
-	{"DS011", Medium, "Container runs as root", "Root in a container increases the impact of a breakout.", "Set a numeric non-root USER."},
+	{"DS010", High, "Host device exposed", "Direct or brokered host device access can expose host data or kernel interfaces.", "Remove device access or use a narrowly scoped broker."},
+	{"DS011", Medium, "Container configured to run as root", "A configured root user increases the impact of a container breakout.", "Configure a numeric non-root USER and verify the runtime process identity separately."},
 	{"DS012", Medium, "Writable root filesystem", "A writable root filesystem aids persistence and tampering.", "Enable --read-only and add explicit writable mounts."},
-	{"DS013", Medium, "No-new-privileges not enabled", "Processes may gain additional privileges through setuid binaries.", "Set security-opt=no-new-privileges:true."},
-	{"DS014", Low, "Image is not immutably identified", "latest or an implicit tag can change unexpectedly.", "Pin the image by digest or an explicit version tag."},
-	{"DS015", Critical, "Unencrypted Docker TCP endpoint", "Credentials and Engine traffic can be intercepted or modified.", "Use a Unix socket, SSH, or TLS-verified TCP endpoint."},
+	{"DS013", Medium, "No explicit no-new-privileges", "Processes may gain additional privileges through setuid binaries.", "Set security-opt=no-new-privileges:true."},
+	{"DS014", Low, "Image uses an implicit or latest tag", "Implicit and latest tags can change unexpectedly.", "Pin the image by a valid digest or use an explicit version tag."},
+	{"DS015", Critical, "Unencrypted Docker TCP endpoint", "Credentials and Engine traffic can be intercepted or modified.", "Use a local socket, SSH, or TLS-verified TCP endpoint."},
 }
 
-func rule(id string) Rule {
-	for _, r := range Rules {
-		if r.ID == id {
-			return r
-		}
-	}
-	panic(id)
-}
-func finding(id, name, image string) Finding {
-	r := rule(id)
-	return Finding{r.ID, SeverityJSON(r.Severity), Sanitize(name), Sanitize(image), r.Summary, r.Risk, r.Remediation}
+var dangerousCapabilities = map[string]struct{}{
+	"SYS_ADMIN":          {},
+	"SYS_MODULE":         {},
+	"SYS_PTRACE":         {},
+	"DAC_READ_SEARCH":    {},
+	"DAC_OVERRIDE":       {},
+	"NET_ADMIN":          {},
+	"NET_RAW":            {},
+	"BPF":                {},
+	"PERFMON":            {},
+	"CHECKPOINT_RESTORE": {},
+	"SYS_RAWIO":          {},
+	"SYS_BOOT":           {},
+	"MKNOD":              {},
 }
 
-func Evaluate(name, image string, c *dockerapi.ContainerConfig, h *dockerapi.HostConfig) []Finding {
-	if c == nil || h == nil {
+// Evaluate checks the structured, privacy-minimized Engine projection.
+func Evaluate(inspect docker.Container) []Finding {
+	if inspect.Config == nil || inspect.HostConfig == nil {
 		return nil
 	}
-	var out []Finding
-	add := func(id string) { out = append(out, finding(id, name, image)) }
-	if h.Privileged {
+	name := safe.Text(strings.TrimPrefix(inspect.Name, "/"))
+	image := safe.Text(inspect.Config.Image)
+	host := inspect.HostConfig
+	var findings []Finding
+	add := func(id string) { findings = append(findings, makeFinding(id, name, image)) }
+
+	if host.Privileged {
 		add("DS001")
 	}
-	for _, m := range h.Mounts {
-		if strings.EqualFold(m.Type, "bind") {
-			checkMount(m.Source, add)
-		}
+	for _, source := range inspect.BindMountSources {
+		checkLinuxMount(source, add)
 	}
-	for _, b := range h.Binds {
-		src := strings.SplitN(b, ":", 2)[0]
-		checkMount(src, add)
-	}
-	if h.NetworkMode == "host" {
+	if host.NetworkMode == "host" {
 		add("DS006")
 	}
-	if h.PidMode == "host" || h.IpcMode == "host" || h.UTSMode == "host" || h.CgroupnsMode == "host" {
+	if host.PIDMode == "host" || host.IPCMode == "host" || host.UTSMode == "host" || host.CgroupNamespaceMode == "host" {
 		add("DS007")
 	}
-	danger := map[string]bool{"SYS_ADMIN": true, "SYS_MODULE": true, "SYS_PTRACE": true, "DAC_READ_SEARCH": true, "NET_ADMIN": true, "BPF": true, "PERFMON": true}
-	for _, cap := range h.CapAdd {
-		if danger[strings.TrimPrefix(strings.ToUpper(cap), "CAP_")] {
+	for _, capability := range host.CapabilitiesAdded {
+		capability = strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(capability)), "CAP_")
+		if capability == "ALL" {
+			add("DS008")
+			break
+		}
+		if _, found := dangerousCapabilities[capability]; found {
 			add("DS008")
 			break
 		}
 	}
-	nnp := false
-	for _, o := range h.SecurityOpt {
-		l := strings.ToLower(o)
-		if strings.Contains(l, "seccomp=unconfined") || strings.Contains(l, "apparmor=unconfined") || strings.Contains(l, "label=disable") {
+
+	noNewPrivileges := false
+	for _, option := range host.SecurityOptions {
+		key, value, hasValue := securityOption(option)
+		if (key == "seccomp" || key == "apparmor") && hasValue && value == "unconfined" {
 			add("DS009")
 		}
-		if l == "no-new-privileges" || l == "no-new-privileges=true" {
-			nnp = true
+		if (key == "label" && hasValue && value == "disable") || (key == "disable" && !hasValue) {
+			add("DS009")
+		}
+		if key == "no-new-privileges" {
+			if !hasValue {
+				noNewPrivileges = true
+				continue
+			}
+			if parsed, err := strconv.ParseBool(value); err == nil {
+				// Moby processes repeated options in order, so the last valid
+				// no-new-privileges value is the effective container override.
+				noNewPrivileges = parsed
+			}
 		}
 	}
-	if len(h.Devices) > 0 {
+	if host.HasDeviceAccess {
 		add("DS010")
 	}
-	user := strings.ToLower(strings.TrimSpace(c.User))
-	if user == "" || user == "0" || user == "root" || strings.HasPrefix(user, "0:") || strings.HasPrefix(user, "root:") {
+	if configuredRoot(inspect.Config.User) {
 		add("DS011")
 	}
-	if !h.ReadonlyRootfs {
+	if !host.ReadonlyRootFilesystem {
 		add("DS012")
 	}
-	if !nnp {
+	if !noNewPrivileges {
 		add("DS013")
 	}
-	if unpinned(image) {
+	if mutableImageReference(inspect.Config.Image) {
 		add("DS014")
 	}
-	return unique(out)
+	return unique(findings)
 }
 
-func checkMount(src string, add func(string)) {
-	p := filepath.Clean(src)
+// EndpointFinding creates the non-container DS015 finding.
+func EndpointFinding() Finding { return makeFinding("DS015", "", "") }
+
+// EvaluateEndpoint applies DS015 to effective connection metadata.
+func EvaluateEndpoint(insecureTCP bool) []Finding {
+	if !insecureTCP {
+		return []Finding{}
+	}
+	return []Finding{EndpointFinding()}
+}
+
+func makeFinding(id, name, image string) Finding {
+	rule, err := Explain(id)
+	if err != nil {
+		panic("invalid built-in rule ID")
+	}
+	return Finding{
+		RuleID:      rule.ID,
+		Severity:    SeverityJSON(rule.Severity),
+		Container:   safe.Text(name),
+		Image:       safe.Text(image),
+		Summary:     rule.Summary,
+		Risk:        rule.Risk,
+		Remediation: rule.Remediation,
+	}
+}
+
+func checkLinuxMount(source string, add func(string)) {
+	if !strings.HasPrefix(source, "/") {
+		return
+	}
+	cleaned := path.Clean(source)
 	switch {
-	case p == "/var/run/docker.sock" || p == "/run/docker.sock":
+	case cleaned == "/var/run/docker.sock" || cleaned == "/run/docker.sock":
 		add("DS002")
-	case p == "/":
+	case cleaned == "/":
 		add("DS003")
-	case within(p, "/var/lib/docker") || within(p, "/var/lib/containerd") || within(p, "/run/containerd"):
+	case withinLinuxPath(cleaned, "/var/lib/docker") ||
+		withinLinuxPath(cleaned, "/var/lib/containerd") ||
+		withinLinuxPath(cleaned, "/run/containerd"):
 		add("DS004")
-	case sensitive(p):
+	case sensitiveLinuxPath(cleaned):
 		add("DS005")
 	}
 }
-func within(p, base string) bool {
-	return p == base || strings.HasPrefix(p, base+string(filepath.Separator))
+
+func withinLinuxPath(value, base string) bool {
+	return value == base || strings.HasPrefix(value, base+"/")
 }
-func sensitive(p string) bool {
-	for _, b := range []string{"/etc", "/root", "/proc", "/sys", "/boot", "/dev"} {
-		if within(p, b) {
+
+func sensitiveLinuxPath(value string) bool {
+	for _, base := range []string{"/etc", "/root", "/proc", "/sys", "/boot", "/dev"} {
+		if withinLinuxPath(value, base) {
 			return true
 		}
 	}
 	return false
 }
-func unpinned(s string) bool {
-	if strings.Contains(s, "@sha256:") {
+
+func securityOption(option string) (key, value string, hasValue bool) {
+	option = strings.TrimSpace(strings.ToLower(option))
+	index := strings.IndexAny(option, "=:")
+	if index < 0 {
+		return option, "", false
+	}
+	return strings.TrimSpace(option[:index]), strings.TrimSpace(option[index+1:]), true
+}
+
+func configuredRoot(user string) bool {
+	user = strings.TrimSpace(user)
+	name, _, _ := strings.Cut(user, ":")
+	if name == "" || name == "root" {
+		return true
+	}
+	name = strings.TrimPrefix(name, "+")
+	if name == "" {
 		return false
 	}
-	last := s[strings.LastIndex(s, "/")+1:]
-	return !strings.Contains(last, ":") || strings.HasSuffix(last, ":latest")
-}
-func unique(in []Finding) []Finding {
-	seen := map[string]bool{}
-	out := in[:0]
-	for _, f := range in {
-		if !seen[f.ID] {
-			seen[f.ID] = true
-			out = append(out, f)
+	for _, r := range name {
+		if r < '0' || r > '9' {
+			return false
 		}
 	}
-	return out
+	uid, err := strconv.ParseUint(name, 10, 64)
+	return err == nil && uid == 0
 }
-func Explain(id string) (Rule, error) {
-	id = strings.ToUpper(id)
-	for _, r := range Rules {
-		if r.ID == id {
-			return r, nil
-		}
+
+func mutableImageReference(image string) bool {
+	named, err := reference.ParseNormalizedNamed(strings.TrimSpace(image))
+	if err != nil {
+		return true
 	}
-	return Rule{}, fmt.Errorf("unknown rule %q", id)
+	if _, pinned := named.(reference.Digested); pinned {
+		return false
+	}
+	if reference.IsNameOnly(named) {
+		return true
+	}
+	tagged, ok := named.(reference.NamedTagged)
+	return !ok || strings.EqualFold(tagged.Tag(), "latest")
+}
+
+func unique(input []Finding) []Finding {
+	seen := make(map[string]struct{}, len(input))
+	output := make([]Finding, 0, len(input))
+	for _, item := range input {
+		if _, found := seen[item.RuleID]; found {
+			continue
+		}
+		seen[item.RuleID] = struct{}{}
+		output = append(output, item)
+	}
+	return output
 }

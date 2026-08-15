@@ -2,10 +2,12 @@ package audit
 
 import (
 	"encoding/json"
-	"regexp"
+	"fmt"
+	"sort"
 	"strings"
 )
 
+// Severity is ordered from least to most severe.
 type Severity int
 
 const (
@@ -23,37 +25,68 @@ func (s Severity) String() string {
 	return [...]string{"info", "low", "medium", "high", "critical"}[s]
 }
 
-func ParseSeverity(v string) (Severity, bool) {
+// ParseSeverity accepts case-insensitive public severity names.
+func ParseSeverity(value string) (Severity, bool) {
 	for i, name := range []string{"info", "low", "medium", "high", "critical"} {
-		if strings.EqualFold(v, name) {
+		if strings.EqualFold(value, name) {
 			return Severity(i), true
 		}
 	}
 	return 0, false
 }
 
-type Finding struct {
-	ID          string       `json:"id"`
-	Severity    SeverityJSON `json:"severity"`
-	Container   string       `json:"container,omitempty"`
-	Image       string       `json:"image,omitempty"`
-	Summary     string       `json:"summary"`
-	Risk        string       `json:"risk"`
-	Remediation string       `json:"remediation"`
-}
-
+// SeverityJSON emits a stable string representation in JSON.
 type SeverityJSON Severity
 
 func (s SeverityJSON) String() string { return Severity(s).String() }
 
 func (s SeverityJSON) MarshalJSON() ([]byte, error) { return json.Marshal(s.String()) }
 
-var ansi = regexp.MustCompile(`\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))`)
-var controls = regexp.MustCompile(`[\x00-\x1f\x7f-\x9f]`)
-var bidiControls = regexp.MustCompile(`[\x{061c}\x{200e}\x{200f}\x{202a}-\x{202e}\x{2066}-\x{2069}]`)
+// Finding is the stable rule result shared by human and JSON output.
+type Finding struct {
+	RuleID      string       `json:"rule_id"`
+	Severity    SeverityJSON `json:"severity"`
+	Container   string       `json:"container"`
+	Image       string       `json:"image"`
+	Summary     string       `json:"summary"`
+	Risk        string       `json:"risk"`
+	Remediation string       `json:"remediation"`
+}
 
-func Sanitize(s string) string {
-	s = ansi.ReplaceAllString(s, "")
-	s = controls.ReplaceAllString(s, "")
-	return bidiControls.ReplaceAllString(s, "")
+// Rule defines stable public metadata for an audit rule.
+type Rule struct {
+	ID          string
+	Severity    Severity
+	Summary     string
+	Risk        string
+	Remediation string
+}
+
+// Explain returns metadata for a rule ID.
+func Explain(id string) (Rule, error) {
+	id = strings.ToUpper(strings.TrimSpace(id))
+	for _, item := range Rules {
+		if item.ID == id {
+			return item, nil
+		}
+	}
+	return Rule{}, fmt.Errorf("unknown rule")
+}
+
+// SortFindings applies the schema's deterministic ordering.
+func SortFindings(findings []Finding) {
+	sort.SliceStable(findings, func(i, j int) bool {
+		left, right := findings[i], findings[j]
+		if left.Severity != right.Severity {
+			return left.Severity > right.Severity
+		}
+		leftName, rightName := strings.ToLower(left.Container), strings.ToLower(right.Container)
+		if leftName != rightName {
+			return leftName < rightName
+		}
+		if left.Container != right.Container {
+			return left.Container < right.Container
+		}
+		return left.RuleID < right.RuleID
+	})
 }
